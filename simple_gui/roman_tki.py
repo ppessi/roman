@@ -6,7 +6,7 @@ import sys
 import tkinter as tk
 from collections import OrderedDict
 from configparser import ConfigParser
-from os import makedirs
+from os import environ, makedirs
 from os.path import expanduser, exists, isdir, isfile, join, split as split_path
 from queue import Queue, Empty
 from threading import Thread
@@ -40,7 +40,12 @@ def path_end(path, num=1):
 def resource_path(filename):
     # we are inside singlefile pyinstaller
     if getattr(sys, 'frozen', False):
-        return join(sys._MEIPASS, filename)
+        if hasattr(sys, '_MEIPASS'):
+            # pyinstaller
+            return join(sys._MEIPASS, filename)
+        elif 'RESOURCEPATH' in environ:
+            # py2app
+            return join(environ['RESOURCEPATH'], filename)
     dir_, _ = split_path(__file__)
     return join(dir_, filename)
 

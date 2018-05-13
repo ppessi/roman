@@ -10,7 +10,9 @@ https://github.com/pypa/sampleproject
 from setuptools import setup, find_packages
 # To use a consistent encoding
 from codecs import open
+from datetime import datetime
 from os import path
+from sys import platform
 
 here = path.abspath(path.dirname(__file__))
 
@@ -18,7 +20,8 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-setup(
+
+options = dict(
     name='apluslms-roman-tki',
     version='0.1.0',
     description='Course material builder for online learning systems (tkinter gui)',
@@ -67,3 +70,35 @@ setup(
         ],
     },
 )
+
+
+if platform == 'darwin':
+    APP_NAME = 'Roman'
+    options.update(dict(
+        app=['roman_tki.py'],
+        app_name=APP_NAME,
+    ))
+    options.setdefault('options', {})['py2app'] = {
+        'bdist_base': '../build',
+        'dist_dir': '../dist',
+        'force_system_tk': True,
+        'iconfile': 'roman.icns',
+        'plist': {
+            'CFBundleName': APP_NAME,
+            'CFBundleDisplayName': APP_NAME,
+            'CFBundleGetInfoString': options['description'],
+            'CFBundleIdentifier': "io.github.apluslms.Roman.roman_tki",
+            'CFBundleVersion': "1.0",
+            'CFBundleShortVersionString': options['version'],
+            'NSHumanReadableCopyright': u"Copyright © {}, {}".format(
+                datetime.now().year,
+                options['author'],
+            ),
+        },
+    }
+    options.setdefault('setup_requires', []).extend([
+        'py2app >= 0.12, != 0.14',
+    ])
+
+if __name__ == '__main__':
+    setup(**options)
