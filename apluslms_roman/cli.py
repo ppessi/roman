@@ -294,11 +294,8 @@ def main():
     exit(context.run())
 
 
-
 ## Actions
-
 # action utils
-
 def get_engine(context):
     try:
         return Engine(settings=context.settings)
@@ -341,7 +338,6 @@ def build_action(context):
     config = get_config(context)
     engine = get_engine(context)
     builder = engine.create_builder(config)
-
     if context.args.list_steps:
         steps = builder.get_steps()
         num_len = max(2, len(str(len(steps)-1)))
@@ -435,6 +431,7 @@ def backend_test_action(context, verbose=False):
         print('\n')
         print(engine.version_info())
     return 0
+
 
 if __name__ == '__main__':
     main()

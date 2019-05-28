@@ -9,6 +9,7 @@ from .observer import StreamObserver
 from .utils.importing import import_string
 from .utils.translation import _
 
+
 class Builder:
     def __init__(self, engine, config, observer=None):
         if not isdir(config.dir):
@@ -17,7 +18,6 @@ class Builder:
         self.path = config.dir
         self._engine = engine
         self._observer = observer or StreamObserver()
-
 
     def get_steps(self, refs: list = None):
         steps = [BuildStep.from_config(i, step) for i, step in enumerate(self.config.steps)]
@@ -32,11 +32,11 @@ class Builder:
                 raise ValueError(_("A step index was too big. Remember, indexing begins with 0."))
         return list(OrderedDict.fromkeys(steps))
 
-    def build(self, step_refs: list = None):
+    def build(self, step_refs: list = None, host_path=None):
         backend = self._engine.backend
         observer = self._observer
         steps = self.get_steps(step_refs)
-        task = BuildTask(self.path, steps)
+        task = BuildTask(self.path if host_path is None else host_path, steps)
         observer.enter_prepare()
         backend.prepare(task, observer)
         observer.enter_build()
