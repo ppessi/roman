@@ -10,6 +10,7 @@ from .observer import StreamObserver
 from .utils.importing import import_string
 from .utils.translation import _
 
+
 class Builder:
     def __init__(self, engine, config, observer=None,
             environment=None, volumes=None):
@@ -33,12 +34,12 @@ class Builder:
             steps = list(OrderedDict.fromkeys(steps))
         return steps
 
-    def build(self, step_refs: list = None, clean_build=False):
+    def build(self, step_refs: list = None, host_path=None, clean_build=False):
         backend = self._engine.backend
         observer = self._observer
         steps = self.get_steps(step_refs) # NOTE: may raise KeyError or IndexError
 
-        task = BuildTask(self.path, steps)
+        task = BuildTask(self.path if host_path is None else host_path, steps)
         observer.enter_prepare()
         result = backend.prepare(task, observer)
         observer.result_msg(result)

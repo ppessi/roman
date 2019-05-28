@@ -54,6 +54,9 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         timeout = env.get('DOCKER_TIMEOUT', None)
         if timeout:
             kwargs['timeout'] = timeout
+        host_path = env.get('DOCKER_HOST_PATH', None)
+        if host_path:
+            print("Host source file path is", host_path)
         return docker.from_env(environment=env, **kwargs)
 
     def _run_opts(self, task, step):
@@ -88,8 +91,9 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                 for key, item in vols.items() if key not in names])
             opts['mounts'] = [
                 Mount(volume['path'],
-                    (task.path if volume.get('type', 'volume') != 'volume'
-                    else volume.get('name')),
+                    env.environ.get('DOCKER_HOST_PATH', task.path)
+                        if volume.get('type', 'volume') != 'volume'
+                        else volume.get('name'),
                     type=volume.get('type', 'volume'), no_copy=False,
                     tmpfs_size=volume.get('tmpfsSize'))
                 for volume in step_vols]
@@ -98,8 +102,10 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             wpath = vols['source']
             opts['mounts'] = [
                 Mount(wpath, None, type='tmpfs', tmpfs_size=self.WORK_SIZE),
-                Mount(join(wpath, 'src'), task.path, type='bind', read_only=True),
-                Mount(join(wpath, 'build'), join(task.path, '_build'), type='bind'),
+                Mount(join(wpath, 'src'), env.environ.get('DOCKER_HOST_PATH', task.path),
+                    type='bind', read_only=True),
+                Mount(join(wpath, 'build'), join(env.environ.get('DOCKER_HOST_PATH', task.path),
+                    '_build'), type='bind', read_only=False),
             ]
             opts['working_dir'] = work_dir
 
