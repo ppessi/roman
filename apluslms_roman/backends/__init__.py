@@ -3,6 +3,7 @@ from collections.abc import Mapping
 
 from ..observer import BuildObserver
 from ..utils.env import EnvDict
+from ..utils.path_mapping import get_host_path
 
 
 BACKENDS = {
@@ -159,3 +160,9 @@ class Backend:
 
     def version_info(self):
         pass
+
+    def remap_path(self, path):
+        map_ = self.environment.environ.get('directory_map', {})
+        # logger.debug("get mapping from environment:{}".format(map_))
+        map_ = dict(map_) if len(map_) == 0 else map_
+        return get_host_path(path, map_)

@@ -26,6 +26,10 @@ properties:
     type: object
     additionalProperties: false
     properties:
+      directory_map:
+        title: docker conatiner-host machine path mapping
+        description: The dictornary mapping between docker and it's host
+        type: object
       host:
         title: docker host
         description: the URL to the Docker host
