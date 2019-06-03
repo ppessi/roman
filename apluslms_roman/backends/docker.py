@@ -29,9 +29,9 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         timeout = env.get('DOCKER_TIMEOUT', None)
         if timeout:
             kwargs['timeout'] = timeout
-        host_path = env.get('DOCKER_HOST_PATH', None)
-        if host_path:
-            print("Host source file path is", host_path)
+        # host_path = env.get('DOCKER_HOST_PATH', None)
+        # if host_path:
+        #     print("Host source file path is", host_path)
         return docker.from_env(environment=env, **kwargs)
 
     def _run_opts(self, task, step):
@@ -43,17 +43,18 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             environment=step.env,
             user='{}:{}'.format(env.uid, env.gid),
         )
-
+        path = self.remap_path(task.path)
+        logger.debug("Final path is:{}".format(path))
         # mounts and workdir
         if step.mnt:
-            opts['mounts'] = [Mount(step.mnt, env.environ.get('DOCKER_HOST_PATH', task.path), type='bind', read_only=False)]
+            opts['mounts'] = [Mount(step.mnt, path, type='bind', read_only=False)]
             opts['working_dir'] = step.mnt
         else:
             wpath = self.WORK_PATH
             opts['mounts'] = [
                 Mount(wpath, None, type='tmpfs', read_only=False, tmpfs_size=self.WORK_SIZE),
-                Mount(join(wpath, 'src'), env.environ.get('DOCKER_HOST_PATH', task.path), type='bind', read_only=True),
-                Mount(join(wpath, 'build'), join(env.environ.get('DOCKER_HOST_PATH', task.path), '_build'), type='bind', read_only=False),
+                Mount(join(wpath, 'src'), path, type='bind', read_only=True),
+                Mount(join(wpath, 'build'), join(path, '_build'), type='bind', read_only=False),
             ]
             opts['working_dir'] = wpath
 

@@ -4,6 +4,7 @@ from os.path import isdir, join
 from apluslms_yamlidator.utils.decorator import cached_property
 from apluslms_yamlidator.utils.collections import OrderedDict
 
+from apluslms_roman.utils.path_mapping import get_host_path
 from .backends import BACKENDS, BuildTask, BuildStep, Environment
 from .observer import StreamObserver
 from .utils.importing import import_string
@@ -32,11 +33,31 @@ class Builder:
                 raise ValueError(_("A step index was too big. Remember, indexing begins with 0."))
         return list(OrderedDict.fromkeys(steps))
 
-    def build(self, step_refs: list = None, host_path=None):
+    def build(self, step_refs: list = None):
         backend = self._engine.backend
         observer = self._observer
         steps = self.get_steps(step_refs)
-        task = BuildTask(self.path if host_path is None else host_path, steps)
+        # Check if has global config set.
+            # Using path in global config file
+        print("dir mapping set in config:", self._engine._dir_mapping if hasattr(self._engine, '_dir_mapping') else None)
+        print("env set:", self._engine._environment.environ.get('DOCKER_HOST_PATH', None))
+
+        if hasattr(self._engine, '_dir_mapping'):
+            print("Using roman config")
+            path = get_host_path(self.path, self._engine._dir_mapping)
+        elif self._engine._environment.environ.get('DOCKER_HOST_PATH', None) is not None:
+            print("Using DOCKER_HOST_PATH")
+            path = self._engine._environment.environ.get('DOCKER_HOST_PATH', None)
+        else:
+            path = self.path
+            print("No config find")
+        task = BuildTask(path, steps)
+        # Using config file
+        # Using -p flag or global environment variable
+        # task = BuildTask(self.path if host_path is None else host_path, steps)
+
+        task = BuildTask(self.path, steps)
+
         observer.enter_prepare()
         backend.prepare(task, observer)
         observer.enter_build()
