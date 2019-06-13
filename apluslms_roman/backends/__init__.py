@@ -8,6 +8,7 @@ from ..observer import BuildObserver
 
 BACKENDS = {
     'docker': 'apluslms_roman.backends.docker.DockerBackend',
+    'kubernetes': 'apluslms_roman.backends.kubernetes.KubernetesBackend',
 }
 
 

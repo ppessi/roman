@@ -9,6 +9,7 @@ allOf:
 optional:
   - backend
   - docker
+  - kubernetes
 
 additionalProperties: false
 properties:
@@ -50,3 +51,13 @@ properties:
         type: integer
         minimum: 0
         exclusiveMinimum: true
+  kubernetes:
+    title: kubernetes backend options
+    description: options for Kubernetes  backend
+    type: object
+    additionalProperties: false
+    properties:
+      namespace:
+        title: default pod namespace
+        description: default namesapce for generated pod which runs build container.
+        type: string
