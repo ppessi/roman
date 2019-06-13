@@ -3,13 +3,12 @@ from os.path import isdir
 from shutil import rmtree
 
 from apluslms_yamlidator.utils.decorator import cached_property
-from apluslms_yamlidator.utils.collections import OrderedDict
+from apluslms_yamlidator.utils.collections import OrderedDict, ChangesDict
+from apluslms_roman.utils.path_mapping import load_from_env, get_pair_form_env
 
-from apluslms_roman.utils.path_mapping import get_host_path
 from .backends import BACKENDS, BuildTask, BuildStep, Environment
 from .observer import StreamObserver
 from .utils.importing import import_string
-from .utils.translation import _
 
 
 class Builder:
@@ -41,7 +40,6 @@ class Builder:
         steps = self.get_steps(step_refs)
 
         # Check if has global config set.
-            # Using path in global config file
         print("dir mapping set in config:", self._engine._dir_mapping if hasattr(self._engine, '_dir_mapping') else None)
         print("env set:", self._engine._environment.environ.get('DOCKER_HOST_PATH', None))
 
@@ -51,14 +49,13 @@ class Builder:
         elif self._engine._environment.environ.get('DOCKER_HOST_PATH', None) is not None:
             print("Using DOCKER_HOST_PATH")
             path = self._engine._environment.environ.get('DOCKER_HOST_PATH', None)
+
+
         else:
             path = self.path
             print("No config find")
-        # Using config file
-        # Using -p flag or global environment variable
-        # task = BuildTask(self.path if host_path is None else host_path, steps)
-
-        task = BuildTask(self.path, steps)
+        print("The final composed host path is:", path)
+        task = BuildTask(path, steps)
 
         observer.enter_prepare()
         result = backend.prepare(task, observer)
@@ -92,11 +89,13 @@ class Engine:
 
         name = getattr(backend_class, 'name', None) or backend_class.__name__.lower()
         env_prefix = name.upper() + '_'
-        env = {k: v for k, v in environ.items() if k.startswith(env_prefix)}
+        env = load_from_env(env_prefix, '.')
+        print("env without setting:", env)
         if settings:
             for k, v in settings.get(name, {}).items():
                 if v is not None and v != '':
-                    env[env_prefix + k.replace('-', '_').upper()] = v
+                    env[k] = dict(v) if isinstance(v, ChangesDict) else v
+        print("env after setting:", env)
         self._environment = Environment(getuid(), getegid(), env)
 
     @cached_property
