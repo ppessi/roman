@@ -9,6 +9,7 @@ allOf:
 optional:
   - backend
   - docker
+  - kubernetes
 
 additionalProperties: false
 properties:
@@ -51,3 +52,13 @@ properties:
         description: default timeout for API calls
         type: integer
         exclusiveMinimum: 0
+  kubernetes:
+    title: kubernetes backend options
+    description: options for Kubernetes  backend
+    type: object
+    additionalProperties: false
+    properties:
+      namespace:
+        title: default pod namespace
+        description: default namesapce for generated pod which runs build container.
+        type: string

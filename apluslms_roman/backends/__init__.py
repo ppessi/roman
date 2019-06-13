@@ -10,6 +10,7 @@ from ..utils.path_mapping import get_host_path
 
 BACKENDS = {
     'docker': 'apluslms_roman.backends.docker.DockerBackend',
+    'kubernetes': 'apluslms_roman.backends.kubernetes.KubernetesBackend',
 }
 
 
