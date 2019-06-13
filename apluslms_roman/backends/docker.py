@@ -2,6 +2,7 @@ import docker
 from os.path import join
 
 from apluslms_yamlidator.utils.decorator import cached_property
+from docker import DockerClient
 
 from ..utils.translation import _
 from . import (
@@ -22,17 +23,28 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
     @cached_property
     def _client(self):
         env = self.environment.environ
-        kwargs = {}
-        version = env.get('DOCKER_VERSION', None)
-        if version:
-            kwargs['version'] = version
-        timeout = env.get('DOCKER_TIMEOUT', None)
-        if timeout:
-            kwargs['timeout'] = timeout
-        # host_path = env.get('DOCKER_HOST_PATH', None)
-        # if host_path:
-        #     print("Host source file path is", host_path)
-        return docker.from_env(environment=env, **kwargs)
+        params = {
+            'base_url': env.get('host'),
+            'version': env.get('version'),
+        }
+        if 'timeout' in env:
+            params['timeout'] = env['timeout']
+
+        # false values: 0, false, '', None
+        # true values: 1, true, "yes", unset
+        tls_verify = bool(env.get('tls_verify', False))
+        cert_path = env.get('cert_path') or None
+        if tls_verify or cert_path:
+            if not cert_path:
+                cert_path = os.path.join(os.path.expanduser('~'), '.docker')
+            params['tls'] = docker.tls.TLSConfig(
+                client_cert=(os.path.join(cert_path, 'cert.pem'), os.path.join(cert_path, 'key.pem')),
+                ca_cert=os.path.join(cert_path, 'ca.pem'),
+                verify=tls_verify,
+                ssl_version=env.get('tls_ssl_version'),
+                assert_hostname=tls_verify and env.get('tls_assert_hostname'),
+            )
+        return DockerClient(**params)
 
     def _run_opts(self, task, step):
         env = self.environment
