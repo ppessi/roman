@@ -1,7 +1,0 @@
-
-version: '1.0'
-backend: docker
-
-docker:
-  directory_map:
-    /data/: /var/lib/docker/volumes/aplus_data/_data/
