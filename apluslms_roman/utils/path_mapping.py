@@ -4,8 +4,10 @@ import logging
 import re
 from os import environ
 
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+json_re = re.compile(r'^(?:["[{]|(?:-?[1-9]\d*(?:\.\d+)?|null|true|false)$)')
 
 
 def get_host_path(original, mapping):
@@ -30,23 +32,17 @@ def get_pair_form_env(key, json_str, read_key=None):
             if isinstance(ret, dict):
                 return ret
         except json.decoder.JSONDecodeError:
-            logger.debug("Error, check your json string")
+            logger.critical("Error, check your json string")
     return json_str
 
 
-def env_process_key(key, prefix):
-    return
-
-
 def env_value_to_dict(json_str):
-    if re.match(r'^(?:["[{]|(?:\d+|null|true|false)$)', json_str):
+    if json_re.match(json_str):
         try:
             ret = json.loads(json_str)
-            if isinstance(ret, dict):
-                return ret
+            return ret
         except json.decoder.JSONDecodeError:
-            logger.debug("Error, check your json string")
-
+            logger.critical("Error, check your json string")
     return json_str
 
 

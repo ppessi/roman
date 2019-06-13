@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from json import loads
 from os import getcwd, listdir, makedirs
-from os.path import basename, dirname, isdir, join
+from os.path import basename, dirname, expanduser, isdir, join
 from sys import stdout
 
 import docker
@@ -19,7 +19,8 @@ from . import (
     BuildResult,
 )
 
-
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 Mount = docker.types.Mount
 
 
@@ -61,10 +62,10 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         cert_path = env.get('cert_path') or None
         if tls_verify or cert_path:
             if not cert_path:
-                cert_path = os.path.join(os.path.expanduser('~'), '.docker')
+                cert_path = join(expanduser('~'), '.docker')
             params['tls'] = docker.tls.TLSConfig(
-                client_cert=(os.path.join(cert_path, 'cert.pem'), os.path.join(cert_path, 'key.pem')),
-                ca_cert=os.path.join(cert_path, 'ca.pem'),
+                client_cert=(join(cert_path, 'cert.pem'), join(cert_path, 'key.pem')),
+                ca_cert=join(cert_path, 'ca.pem'),
                 verify=tls_verify,
                 ssl_version=env.get('tls_ssl_version'),
                 assert_hostname=tls_verify and env.get('tls_assert_hostname'),

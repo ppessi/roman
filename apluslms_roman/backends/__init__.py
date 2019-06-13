@@ -1,6 +1,8 @@
+import logging
 from collections import namedtuple
 from collections.abc import Mapping
 
+from apluslms_roman.utils.path_mapping import get_host_path
 from ..observer import BuildObserver
 from ..utils.env import EnvDict
 from ..utils.path_mapping import get_host_path
@@ -16,6 +18,9 @@ BuildTask = namedtuple('BuildTask', [
     'steps',
 ])
 
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def clean_image_name(image):
     if ':' not in image:
