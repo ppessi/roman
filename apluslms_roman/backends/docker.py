@@ -1,3 +1,5 @@
+import os
+import logging
 import docker
 from os.path import join
 
@@ -10,7 +12,8 @@ from . import (
     BuildResult,
 )
 
-
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 Mount = docker.types.Mount
 
 
