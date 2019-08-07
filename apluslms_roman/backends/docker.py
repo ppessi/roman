@@ -88,20 +88,24 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
     def prepare(self, task, observer):
         client = self._client
         for step in task.steps:
-            observer.step_preflight(step)
-            image, tag = step.img.split(':', 1)
             try:
-                img = client.images.get(step.img)
-            except docker.errors.ImageNotFound:
-                observer.step_running(step)
-                observer.manager_msg(step, "Downloading image {}".format(step.img))
+                observer.step_preflight(step)
+                image, tag = step.img.split(':', 1)
                 try:
-                    img = client.images.pull(image, tag)
-                except docker.errors.APIError as err:
-                    observer.step_failed(step)
-                    error = "%s %s" % (err.__class__.__name__, err)
-                    return BuildResult(-1, error, step)
-            observer.step_succeeded(step)
+                    img = client.images.get(step.img)
+                except docker.errors.ImageNotFound:
+                    observer.step_running(step)
+                    observer.manager_msg(step, "Downloading image {}".format(step.img))
+                    try:
+                        img = client.images.pull(image, tag)
+                    except docker.errors.APIError as err:
+                        observer.step_failed(step)
+                        error = "%s %s" % (err.__class__.__name__, err)
+                        return BuildResult(code=-1, error=error, step=step)
+                observer.step_succeeded(step)
+            except KeyboardInterrupt:
+                observer.step_cancelled(step)
+                return BuildResult(False, step=step)
         return BuildResult()
 
     def build(self, task, observer):
@@ -109,7 +113,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         for step in task.steps:
             observer.step_pending(step)
             opts = self._run_opts(task, step)
-            observer.manager_msg(step, "Starting container {}:".format(opts['image']))
+            observer.manager_msg(step, "Starting container {}".format(opts['image']))
             try:
                 with create_container(client, **opts) as container:
                     observer.step_running(step)
@@ -119,16 +123,16 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             except docker.errors.APIError as err:
                 observer.step_failed(step)
                 error = "%s %s" % (err.__class__.__name__, err)
-                return BuildResult(-1, error, step)
+                return BuildResult(code=-1, error=error, step=step)
             except KeyboardInterrupt:
                 observer.step_cancelled(step)
-                raise
+                return BuildResult(False, step=step)
             else:
                 code = ret.get('StatusCode', None)
                 error = ret.get('Error', None)
                 if code or error:
                     observer.step_failed(step)
-                    return BuildResult(code, error, step)
+                    return BuildResult(code=code, error=error, step=step)
                 observer.step_succeeded(step)
         return BuildResult()
 

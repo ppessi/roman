@@ -5,7 +5,7 @@ from shutil import rmtree
 from apluslms_yamlidator.utils.decorator import cached_property
 from apluslms_yamlidator.utils.collections import OrderedDict
 
-from .backends import BACKENDS, BuildTask, BuildStep, Environment
+from .backends import BACKENDS, BuildResult, BuildTask, BuildStep, Environment
 from .observer import StreamObserver
 from .utils.importing import import_string
 from .utils.translation import _
@@ -36,22 +36,24 @@ class Builder:
         backend = self._engine.backend
         observer = self._observer
         steps = self.get_steps(step_refs) # NOTE: may raise KeyError or IndexError
-
-        task = BuildTask(self.path, steps)
-        observer.enter_prepare()
-        result = backend.prepare(task, observer)
-        observer.result_msg(result)
-        if result.ok:
-            observer.enter_build()
-            # FIXME: add support for other build paths
-            if clean_build:
-                if isdir('_build'):
-                    rmtree('_build')
-            if clean_build or not isdir('_build'):
-                mkdir('_build')
-            result = backend.build(task, observer)
+        try:
+            task = BuildTask(self.path, steps)
+            observer.enter_prepare()
+            result = backend.prepare(task, observer)
             observer.result_msg(result)
-        observer.done(result)
+            if result.ok:
+                observer.enter_build()
+                # FIXME: add support for other build paths
+                if clean_build:
+                    if isdir('_build'):
+                        rmtree('_build')
+                if clean_build or not isdir('_build'):
+                    mkdir('_build')
+                result = backend.build(task, observer)
+                observer.result_msg(result)
+            observer.done(result)
+        except KeyboardInterrupt:
+            return BuildResult(False)
         return result
 
 

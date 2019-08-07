@@ -1,2 +1,3 @@
 apluslms-yamlidator
 appdirs >=1.4.0, <2
+colorama ~=0.4.1

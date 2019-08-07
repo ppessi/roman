@@ -67,23 +67,39 @@ class BuildStep:
 
 
 class BuildResult:
-    __slots__ = ('code', 'error', 'step')
+    __slots__ = ('ok', 'code', 'error', 'step')
 
-    def __init__(self, code=0, error=None, step=None):
+    def __init__(self, ok=None, *, code=0, error=None, step=None):
+        if error is not None and code == 0:
+            code = -1
+        self.ok = ok if ok is not None else code == 0
         self.code = code
         self.error = error
         self.step = step
-        assert self.ok or step is not None, "step is required for failed result"
+        # it is possible for build to be cancelled without knowing
+        # which step was in progress, so we can't require step
+        # for cancelled build
+        assert code == 0 or step is not None, "step is required for failed result"
 
     @property
-    def ok(self):
-        return self.code == 0 and self.error is None
+    def cancelled(self):
+        return not self.ok and self.code == 0
+
+    @property
+    def failed(self):
+        return not self.ok and self.code != 0
 
     def __str__(self):
         if self.ok:
             return "Build ok"
+        if not self.step:
+            return "Build cancelled"
+        status = 'cancelled' if self.cancelled else 'failed'
+        msg = "Build {} on step {}".format(status, self.step)
+        if self.cancelled:
+            return msg
         error = self.error or 'exit code {}'.format(self.code)
-        return "Build failed on step {}: {}".format(self.step, error)
+        return "{}: {}".format(msg, error)
 
 
 Environment = namedtuple('Environment', [
