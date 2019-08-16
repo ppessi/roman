@@ -269,6 +269,13 @@ def add_cli_actions(parser):
     build.copy_defaults_to(parser)
     parser.set_callback(build_action)
 
+    prepare = parser.add_parser('prepare',
+        callback=partial(build_action, prepare_only=True),
+        help=_("prepare build"))
+    prepare.add_argument('-f', '--force', action='store_true',
+        help=_("download all images"))
+    prepare.add_argument('-s', '--steps', nargs='+',
+        help=_("select which steps to prepare (use either index or step name)"))
 
     parser.add_parser('init',
         callback=init_action,
@@ -529,7 +536,7 @@ def env_add(env, args):
 
 # actions
 
-def build_action(context):
+def build_action(context, prepare_only=False):
     config = get_config(context)
     engine = get_engine(context)
     builder = engine.create_builder(config,
@@ -542,16 +549,19 @@ def build_action(context):
     if not verify_engine(engine, only_when_error=True):
         return 1
     if not config.steps:
-        print("Nothing to build.")
+        print("Nothing to {}.".format('prepare' if prepare_only else 'build'))
         return 1
 
     # build project
     steps = context.args.steps
     if steps:
-        steps = chain.from_iterable(step.split(',') for step in steps)
+        steps = list(chain.from_iterable(step.split(',') for step in steps))
 
     try:
-        result = builder.build(step_refs=steps, clean_build=context.args.clean)
+        if prepare_only:
+            result = builder.prepare(steps=steps, force=context.args.force)
+        else:
+            result = builder.build(step_refs=steps, clean_build=context.args.clean)
     except KeyError as err:
         exit(1, _("No step named {}.").format(err.args[0]))
     except IndexError as err:

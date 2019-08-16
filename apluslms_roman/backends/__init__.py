@@ -101,7 +101,7 @@ class Backend:
     def __init__(self, environment: Environment):
         self.environment = environment
 
-    def prepare(self, task: BuildTask, observer: BuildObserver):
+    def prepare(self, task: BuildTask, observer: BuildObserver, force=False):
         raise NotImplementedError
 
     def build(self, task: BuildTask, observer: BuildObserver):

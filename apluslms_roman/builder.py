@@ -32,15 +32,24 @@ class Builder:
             steps = list(OrderedDict.fromkeys(steps))
         return steps
 
+    def prepare(self, steps: list = None, force=False):
+        backend = self._engine.backend
+        observer = self._observer
+        if not steps or not isinstance(steps[0], BuildStep):
+            steps = self.get_steps(steps) # NOTE: may raise KeyError or IndexError
+        task = BuildTask(self.path, steps)
+        observer.enter_prepare()
+        result = backend.prepare(task, observer, force)
+        observer.result_msg(result)
+        return result
+
     def build(self, step_refs: list = None, clean_build=False):
         backend = self._engine.backend
         observer = self._observer
         steps = self.get_steps(step_refs) # NOTE: may raise KeyError or IndexError
-
         task = BuildTask(self.path, steps)
-        observer.enter_prepare()
-        result = backend.prepare(task, observer)
-        observer.result_msg(result)
+
+        result = self.prepare(steps)
         if result.ok:
             observer.enter_build()
             # FIXME: add support for other build paths

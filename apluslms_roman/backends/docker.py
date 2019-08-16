@@ -101,7 +101,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
 
         return opts
 
-    def prepare(self, task, observer):
+    def prepare(self, task, observer, force=False):
         client = self._client
         images = self._cache.images
         day = timedelta(days=1)
@@ -119,9 +119,9 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             except docker.errors.ImageNotFound:
                 img_found = False
 
-            if not img_found or should_update:
+            if any((not img_found, should_update, force)):
                 observer.step_running(step)
-                if img_found:
+                if should_update:
                     observer.manager_msg(step,
                         ("Checking for updates for {} and "
                         "downloading if any").format(step.img))
