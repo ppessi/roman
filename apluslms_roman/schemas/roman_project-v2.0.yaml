@@ -29,6 +29,12 @@ definitions:
         type: string
       env:
         $ref: "roman_environment-v1.0#/properties/environment"
+      settings:
+        type: object
+      imageType:
+        enum:
+          - docker
+          - drone
   stepitem:
     if:
       type: string

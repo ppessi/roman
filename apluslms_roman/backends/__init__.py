@@ -38,6 +38,10 @@ class BuildStep:
             if 'img' not in data:
                 raise RuntimeError(
                     "Missing image name (img) in step configuration: {}".format(data))
+            environment = environment or []
+            if 'settings' in data:
+                environment.extend(({('PLUGIN_%s' % (k.upper(),)): v}
+                    for k, v in data['settings'].items()))
             return cls(
                 index,
                 data['img'],
