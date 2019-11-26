@@ -2,12 +2,16 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from io import BytesIO
-from os.path import join
+from json import loads
+from os import getcwd, listdir, makedirs
+from os.path import basename, dirname, isdir, join
+from sys import stdout
 
 import docker
 import tarfile
 from apluslms_yamlidator.utils.decorator import cached_property
 
+from .. import print_files
 from ..utils.translation import _
 from . import (
     Backend,
@@ -39,7 +43,6 @@ class DockerBackend(Backend):
     debug_hint = _("""Do you have docker-ce installed and running?
 Are you in local 'docker' group? Have you logged out and back in after joining?
 You might be able to add yourself to that group with 'sudo adduser docker'.""")
-
 
     @cached_property
     def _client(self):
@@ -135,6 +138,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                     for line in container.logs(stderr=True, stream=True):
                         observer.container_msg(step, line.decode('utf-8'))
                     ret = container.wait(timeout=10)
+
             except docker.errors.APIError as err:
                 observer.step_failed(step)
                 error = "%s %s" % (err.__class__.__name__, err)
@@ -161,28 +165,101 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         opts['image'] = 'file_manifest:latest'
         return opts
 
+    def get_files_to_update(self, source, target):
+        files = sorted([f[2:] for f in source
+            if f not in target or source[f] != target[f]])
+
+        filtered = set()
+
+        if len(files) == len(source) and files:
+            return ['.']
+
+        subfolder_level = 1
+        # go through folders one 'level' at a time, if everything in a folder
+        # is going to be copied, we'll just copy the folder instead of files individually
+        while files:
+            filtered = filtered.union({f for f in files if f.count('/') < subfolder_level})
+            files = [f for f in files if f.count('/') >= subfolder_level]
+            folders = {dirname(f) for f in files if f.count('/') == subfolder_level}
+            for folder in folders:
+                update_whole_folder = (
+                    len([f for f in files if folder in f]) ==
+                    len([f for f in source if folder in f]))
+                if update_whole_folder:
+                    files = [f for f in files if folder not in f]
+                    filtered.add(folder)
+                else:
+                    files_in_folder = {f for f in files
+                        if folder in f and f.count('/') == subfolder_level}
+                    files = [f for f in files if f not in files_in_folder]
+                    filtered = filtered.union(files_in_folder)
+            subfolder_level += 1
+
+        return list(filtered)
+
+    def get_file_manifest(self, container, path):
+        tar, _ = docker.APIClient().get_archive(
+            container=container.id,
+            path=path)
+        bytes_ = BytesIO()
+        for chunk in tar:
+            bytes_.write(chunk)
+        bytes_.seek(0)
+        tar = tarfile.open(mode="r", fileobj=bytes_)
+        return loads(tar.extractfile('file_manifest.json').read().decode())
+
     def update_volume(self, volume_name, working_dir):
         opts = self.opts_for_update(volume_name, working_dir)
         with create_container(self._client, **opts) as container:
-            print("Making tarball...")
-            tar_stream = BytesIO()
-            tar = tarfile.TarFile(fileobj=tar_stream, mode='w')
-            tar.add('.')
-            tar.close()
-            tar_stream.seek(0)
+            print_files.main()
+            local_files = loads(open('file_manifest.json', 'r').read())
 
-            apiclient = docker.APIClient()
-            apiclient.put_archive(
-                container=container.id,
-                path=opts['working_dir'],
-                data=tar_stream)
-            print("\nTar copied to volume")
+            container.wait(timeout=10)
+            vol_files = self.get_file_manifest(container,
+                opts['working_dir'] + '/file_manifest.json')
+            files = self.get_files_to_update(local_files, vol_files)
+
+            if not files:
+                return
+            else:
+                status_txt = "\rMaking tarball... %d%%"
+                stdout.write(status_txt % 0)
+                tar_stream = BytesIO()
+                tar = tarfile.TarFile(fileobj=tar_stream, mode='w')
+                total = len(files)
+                for i in range(total):
+                    stdout.write(status_txt % int((i + 1) * 100 / total))
+                    tar.add(files[i])
+                tar.close()
+
+
+                tar_stream.seek(0)
+                apiclient = docker.APIClient()
+                apiclient.put_archive(
+                    container=container.id,
+                    path=opts['working_dir'],
+                    data=tar_stream)
+                print("\nTar copied to volume")
+
 
     def update_local(self, volume_name, working_dir):
         opts = self.opts_for_update(volume_name, working_dir)
+        # observer.manager_msg(step, "Starting container {}:".format(opts['image']))
         with create_container(self._client, **opts) as container:
-            print("Loading files from volume")
+            print_files.main()
+            local_files = loads(open('file_manifest.json', 'r').read())
+
+            container.wait(timeout=10)
+            vol_files = self.get_file_manifest(container,
+                opts['working_dir'] + '/file_manifest.json')
+            files = self.get_files_to_update(vol_files, local_files)
+
+            status_txt = "\rCopying files to local... %d%%"
+            if not files:
+                return
+            total = len(files)
             apiclient = docker.APIClient()
+            print("Loading files from volume")
             tar, _ = apiclient.get_archive(
                 container=container.id,
                 path=join(opts['working_dir'], '.'))
@@ -191,9 +268,16 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                 bytes_.write(chunk)
             bytes_.seek(0)
             tar = tarfile.open(mode="r", fileobj=bytes_)
-            files = [f for f in tar.getmembers() if '/.git' not in f.name]
-            tar.extractall(members=files)
-            print("Files loaded")
+            working_dir = working_dir[1:]
+            stdout.write(status_txt % 0)
+            for i in range(total):
+                f = files[i]
+                folder = dirname(f)
+                if folder:
+                    makedirs(folder, exist_ok=True)
+                stdout.write(status_txt % int((i + 1) * 100 / total))
+                tar.extract(join('.', f))
+            print()
 
     def verify(self):
         try:
