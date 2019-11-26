@@ -58,14 +58,23 @@ class ProjectConfig(Document):
 
     def validate(self, *args, **kwargs):
         super().validate(*args, **kwargs)
-        if not self.steps:
-            return
-        names = Counter((s['name'].lower() for s in self.steps if 'name' in s))
-        names = [name for name, amount in names.items() if amount > 1]
-        if names:
-            raise ProjectConfigError(("Step names should be unique.\n"
-                "Following names were used more than once:\n  - {}")
-                .format('\n  - '.join(names)))
+        if self.steps:
+            names = Counter((s['name'].lower() for s in self.steps if 'name' in s))
+            names = [name for name, amount in names.items() if amount > 1]
+            if names:
+                raise ProjectConfigError(("Step names should be unique.\n"
+                    "Following names were used more than once:\n  - {}")
+                    .format('\n  - '.join(names)))
+        if 'volumes' in self:
+            vols = set(self['volumes'].keys())
+            step_vols = chain.from_iterable(
+                [step['volumes'] for step in self.steps if 'volumes' in step])
+            step_vol_names = {vol['name'] for vol in step_vols if 'name' in vol}
+            invalid_vols = vols - step_vol_names
+            if len(invalid_vols) > 0:
+                raise ProjectConfigError("All volumes in 'volumes' should be "
+                    "referenced in at least one step. These volumes weren't "
+                    "referenced in any steps: {}".format(invalid_vols))
 
     def add_step(self, step):
         if 'name' in step:

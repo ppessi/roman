@@ -11,7 +11,8 @@ from .utils.importing import import_string
 from .utils.translation import _
 
 class Builder:
-    def __init__(self, engine, config, observer=None, environment=None):
+    def __init__(self, engine, config, observer=None,
+            environment=None, volumes=None):
         if not isdir(config.dir):
             raise ValueError(_("config.dir isn't a directory."))
         self.config = config
@@ -19,10 +20,10 @@ class Builder:
         self._engine = engine
         self._observer = observer or StreamObserver()
         self._environment = environment or []
-
+        self._volumes = volumes or {}
 
     def get_steps(self, refs: list = None):
-        steps = [BuildStep.from_config(i, step, self._environment)
+        steps = [BuildStep.from_config(i, step, self._environment, self._volumes)
             for i, step in enumerate(self.config.steps)]
         if refs:
             name_dict = {step.name: step for step in steps}

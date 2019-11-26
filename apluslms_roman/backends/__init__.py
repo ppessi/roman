@@ -30,10 +30,10 @@ class BuildStep:
     env: If not None, dict that is given as environment for the image
     ref: Name/index of the step
     """
-    __slots__ = ('img', 'cmd', 'mnt', 'env', 'name', 'ref')
+    __slots__ = ('img', 'cmd', 'mnt', 'env', 'name', 'ref', 'dir')
 
     @classmethod
-    def from_config(cls, index, data, environment=None):
+    def from_config(cls, index, data, environment=None, volumes=None):
         if isinstance(data, Mapping):
             if 'img' not in data:
                 raise RuntimeError(
@@ -42,20 +42,45 @@ class BuildStep:
             if 'settings' in data:
                 environment.extend(({('PLUGIN_%s' % (k.upper(),)): v}
                     for k, v in data['settings'].items()))
+
+            step_vols = data.get('volumes', [])
+            for volume in step_vols:
+                if 'name' not in volume and 'type' not in volume:
+                    volume['type'] = 'tmpfs'
+                elif 'name' in volume:
+                    volume_defaults = volumes.get(volume['name'], {})
+                    for key, item in volume_defaults.items():
+                        if key not in volume:
+                            volume[key] = item
+                if 'path' not in volume:
+                    raise RuntimeError("Volume {} needs a path".format(volume))
+
+            work_dir = data.get('working_dir') or 'source'
+            if work_dir[0] != '/':
+                for volume in step_vols:
+                    if 'name' in volume and volume['name'] == work_dir:
+                        work_dir = volume['path']
+                        break
+                else:
+                    if work_dir not in {'source', 'cache'}:
+                        raise RuntimeError(("working_dir {} isn't an absolute "
+                            "path and doesn't refer to a volume name").format(work_dir))
+
             return cls(
                 index,
                 data['img'],
                 data.get('cmd'),
-                data.get('mnt'),
+                step_vols,
                 environment,
                 data.get('env'),
                 data.get('name'),
+                work_dir
             )
         return cls(index, clean_image_name(data))
 
     def __init__(
-            self, ref, img, cmd=None, mnt=None,
-            project_env=None, step_env=None, name=None):
+            self, ref, img, cmd=None, mnt=None, project_env=None,
+            step_env=None, name=None, working_dir=None):
         self.ref = ref
         self.img = clean_image_name(img)
         self.cmd = cmd if (cmd is None or isinstance(cmd, str)) else tuple(cmd)
@@ -65,6 +90,7 @@ class BuildStep:
             (project_env, "project configuration"),
             (step_env, "step {}".format(str(self)))
         ).get_combined()
+        self.dir = working_dir
 
     def __str__(self):
         return self.name or str(self.ref)
@@ -99,8 +125,11 @@ Environment = namedtuple('Environment', [
 
 class Backend:
     WORK_SIZE = '100M'
-    WORK_PATH = '/work'
     LABEL_PREFIX = 'io.github.apluslm.roman'
+    VOLUMES = {
+        'cache': '/work',
+        'source': '/work/source'
+    }
 
     def __init__(self, environment: Environment):
         self.environment = environment

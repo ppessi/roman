@@ -533,7 +533,8 @@ def build_action(context):
     config = get_config(context)
     engine = get_engine(context)
     builder = engine.create_builder(config,
-        environment=get_project_environment(context, config))
+        environment=get_project_environment(context, config),
+        volumes=config.get('volumes'))
 
     if hasattr(context.args, 'list_steps') and context.args.list_steps:
         step_list_action(context)

@@ -1,9 +1,11 @@
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from io import BytesIO
 from os.path import join
 
 import docker
+import tarfile
 from apluslms_yamlidator.utils.decorator import cached_property
 
 from ..utils.translation import _
@@ -38,6 +40,7 @@ class DockerBackend(Backend):
 Are you in local 'docker' group? Have you logged out and back in after joining?
 You might be able to add yourself to that group with 'sudo adduser docker'.""")
 
+
     @cached_property
     def _client(self):
         env = self.environment.environ
@@ -71,17 +74,32 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         )
 
         # mounts and workdir
+        vols = self.VOLUMES
+        work_dir = step.dir
+        if work_dir in vols:
+            work_dir = vols[work_dir]
         if step.mnt:
-            opts['mounts'] = [Mount(step.mnt, task.path, type='bind', read_only=False)]
-            opts['working_dir'] = step.mnt
-        else:
-            wpath = self.WORK_PATH
+            names = [vol['name'] for vol in step.mnt if 'name' in vol]
+            step_vols = list(step.mnt)
+            step_vols.extend([{'name': key, 'path': item}
+                for key, item in vols.items() if key not in names])
             opts['mounts'] = [
-                Mount(wpath, None, type='tmpfs', read_only=False, tmpfs_size=self.WORK_SIZE),
+                Mount(volume['path'],
+                    (task.path if volume.get('type', 'volume') != 'volume'
+                    else volume.get('name')),
+                    type=volume.get('type', 'volume'), no_copy=False,
+                    tmpfs_size=volume.get('tmpfsSize'))
+                for volume in step_vols]
+            opts['working_dir'] = work_dir
+        else:
+            wpath = vols['source']
+            opts['mounts'] = [
+                Mount(wpath, None, type='tmpfs', tmpfs_size=self.WORK_SIZE),
                 Mount(join(wpath, 'src'), task.path, type='bind', read_only=True),
-                Mount(join(wpath, 'build'), join(task.path, '_build'), type='bind', read_only=False),
+                Mount(join(wpath, 'build'), join(task.path, '_build'), type='bind'),
             ]
-            opts['working_dir'] = wpath
+            opts['working_dir'] = work_dir
+
 
         return opts
 
@@ -109,6 +127,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         for step in task.steps:
             observer.step_pending(step)
             opts = self._run_opts(task, step)
+            self.update_volume('source', opts['working_dir'])
             observer.manager_msg(step, "Starting container {}:".format(opts['image']))
             try:
                 with create_container(client, **opts) as container:
@@ -130,7 +149,51 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                     observer.step_failed(step)
                     return BuildResult(code, error, step)
                 observer.step_succeeded(step)
+            self.update_local('source', opts['working_dir'])
         return BuildResult()
+
+    def opts_for_update(self, volume_name, working_dir):
+        opts = {}
+        opts['mounts'] = [Mount(
+            working_dir, volume_name,
+            type='volume', no_copy=False)]
+        opts['working_dir'] = working_dir
+        opts['image'] = 'file_manifest:latest'
+        return opts
+
+    def update_volume(self, volume_name, working_dir):
+        opts = self.opts_for_update(volume_name, working_dir)
+        with create_container(self._client, **opts) as container:
+            print("Making tarball...")
+            tar_stream = BytesIO()
+            tar = tarfile.TarFile(fileobj=tar_stream, mode='w')
+            tar.add('.')
+            tar.close()
+            tar_stream.seek(0)
+
+            apiclient = docker.APIClient()
+            apiclient.put_archive(
+                container=container.id,
+                path=opts['working_dir'],
+                data=tar_stream)
+            print("\nTar copied to volume")
+
+    def update_local(self, volume_name, working_dir):
+        opts = self.opts_for_update(volume_name, working_dir)
+        with create_container(self._client, **opts) as container:
+            print("Loading files from volume")
+            apiclient = docker.APIClient()
+            tar, _ = apiclient.get_archive(
+                container=container.id,
+                path=join(opts['working_dir'], '.'))
+            bytes_ = BytesIO()
+            for chunk in tar:
+                bytes_.write(chunk)
+            bytes_.seek(0)
+            tar = tarfile.open(mode="r", fileobj=bytes_)
+            files = [f for f in tar.getmembers() if '/.git' not in f.name]
+            tar.extractall(members=files)
+            print("Files loaded")
 
     def verify(self):
         try:
