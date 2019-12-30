@@ -36,9 +36,11 @@ class Message(Enum):
     PHASE_UPDATE = 0
     STATE_UPDATE = 1
 
-    MANAGER_MSG = 11   # data is a list of strings
-    CONTAINER_MSG = 12 # data is a list of strings
-    RESULT_MSG = 13    # data is a tuple (code: int, error: str)
+    MANAGER_MSG = 11     # data is a list of strings
+    CONTAINER_MSG = 12   # data is a list of strings
+    RESULT_MSG = 13      # data is a tuple (code: int, error: str)
+    PROGRESS_START = 14  # data is a string
+    PROGRESS_MSG = 15    # data is a tuple (msg: string, progress: int)
 
 
 # Step states in different phases
@@ -153,6 +155,12 @@ class BuildObserver:
     def result_msg(self, result):
         self._send_message(Message.RESULT_MSG, result.step, (result.code, result.error))
 
+    def start_progress(self, step, msg):
+        self._send_message(Message.PROGRESS_START, step, "%s [ 0%%]" % (msg,))
+
+    def notify_progress(self, step, msg, progress):
+        self._send_message(Message.PROGRESS_MSG, step, (msg, progress))
+
 
 ENTER_STATE_TEXTS = {
     StepState.PREFLIGHT: "Pre-Flight tasks..",
@@ -177,6 +185,14 @@ class StreamObserver(BuildObserver):
             fmt = "%s >> %s\n"
         elif type_ == Message.MANAGER_MSG:
             fmt = "%s : %s\n"
+        elif type_ == Message.PROGRESS_START:
+            fmt = "%s : %s"
+        elif type_ == Message.PROGRESS_MSG:
+            if data[1] == 100:
+                fmt = "\r%s : %s\n"
+            else:
+                fmt = "\r%s : %s"
+            data = "%s [%d%%]" % data
         else:
             return
         phase_s = phase.name

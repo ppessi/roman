@@ -130,7 +130,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         for step in task.steps:
             observer.step_pending(step)
             opts = self._run_opts(task, step)
-            self.update_volume('source', opts['working_dir'])
+            self.update_volume('source', opts['working_dir'], step, observer)
             observer.manager_msg(step, "Starting container {}:".format(opts['image']))
             try:
                 with create_container(client, **opts) as container:
@@ -153,7 +153,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                     observer.step_failed(step)
                     return BuildResult(code, error, step)
                 observer.step_succeeded(step)
-            self.update_local('source', opts['working_dir'])
+            self.update_local('source', opts['working_dir'], step, observer)
         return BuildResult()
 
     def opts_for_update(self, volume_name, working_dir):
@@ -208,8 +208,9 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         tar = tarfile.open(mode="r", fileobj=bytes_)
         return loads(tar.extractfile('file_manifest.json').read().decode())
 
-    def update_volume(self, volume_name, working_dir):
+    def update_volume(self, volume_name, working_dir, step, observer):
         opts = self.opts_for_update(volume_name, working_dir)
+        observer.manager_msg(step, "Copying files to container")
         with create_container(self._client, **opts) as container:
             print_files.main()
             local_files = loads(open('file_manifest.json', 'r').read())
@@ -220,18 +221,18 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             files = self.get_files_to_update(local_files, vol_files)
 
             if not files:
+                observer.manager_msg(step, "No files to copy")
                 return
             else:
-                status_txt = "\rMaking tarball... %d%%"
-                stdout.write(status_txt % 0)
+                msg = "Making tarball"
+                observer.start_progress(step, msg)
                 tar_stream = BytesIO()
                 tar = tarfile.TarFile(fileobj=tar_stream, mode='w')
                 total = len(files)
                 for i in range(total):
-                    stdout.write(status_txt % int((i + 1) * 100 / total))
+                    observer.notify_progress(step, msg, int((i + 1) * 100 / total))
                     tar.add(files[i])
                 tar.close()
-
 
                 tar_stream.seek(0)
                 apiclient = docker.APIClient()
@@ -239,10 +240,10 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                     container=container.id,
                     path=opts['working_dir'],
                     data=tar_stream)
-                print("\nTar copied to volume")
+                observer.manager_msg(step, "Tar loaded to volume")
 
 
-    def update_local(self, volume_name, working_dir):
+    def update_local(self, volume_name, working_dir, step, observer):
         opts = self.opts_for_update(volume_name, working_dir)
         # observer.manager_msg(step, "Starting container {}:".format(opts['image']))
         with create_container(self._client, **opts) as container:
@@ -254,12 +255,12 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                 opts['working_dir'] + '/file_manifest.json')
             files = self.get_files_to_update(vol_files, local_files)
 
-            status_txt = "\rCopying files to local... %d%%"
+            observer.manager_msg(step, "Updating local files")
+            msg = "Downloading files from container"
             if not files:
                 return
             total = len(files)
             apiclient = docker.APIClient()
-            print("Loading files from volume")
             tar, _ = apiclient.get_archive(
                 container=container.id,
                 path=join(opts['working_dir'], '.'))
@@ -269,15 +270,14 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             bytes_.seek(0)
             tar = tarfile.open(mode="r", fileobj=bytes_)
             working_dir = working_dir[1:]
-            stdout.write(status_txt % 0)
+            observer.start_progress(step, msg)
             for i in range(total):
                 f = files[i]
                 folder = dirname(f)
                 if folder:
                     makedirs(folder, exist_ok=True)
-                stdout.write(status_txt % int((i + 1) * 100 / total))
+                observer.notify_progress(step, msg, int((i + 1) * 100 / total))
                 tar.extract(join('.', f))
-            print()
 
     def verify(self):
         try:
