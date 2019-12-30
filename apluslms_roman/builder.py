@@ -77,12 +77,12 @@ class Engine:
         name = getattr(backend_class, 'name', None) or backend_class.__name__.lower()
         env_prefix = name.upper() + '_'
         env = load_from_env(env_prefix, '.')
-        logger.debug("env without reading global config:{}".format(env))
+        # logger.debug("env without reading global config:{}".format(env))
         if settings:
             for k, v in settings.get(name, {}).items():
                 if v is not None and v != '':
                     env[k] = v
-        logger.debug("env after read from global config:{}".format(env))
+        # logger.debug("env after read from global config:{}".format(env))
         self._environment = Environment(getuid(), getegid(), env)
 
     @cached_property

@@ -92,7 +92,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             labels=labels
         )
         path = self.remap_path(task.path)
-        logger.debug("Final path is:{}".format(path))
+        # logger.debug("Final path is:{}".format(path))
         # mounts and workdir
         vols = self.VOLUMES
         work_dir = step.dir
