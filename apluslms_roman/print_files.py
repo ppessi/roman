@@ -3,6 +3,7 @@ from os import listdir
 from os.path import getmtime, getsize, isdir, join
 
 def main():
+
     file_info = {}
 
     def get_file_info(path):

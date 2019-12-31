@@ -216,8 +216,14 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             local_files = loads(open('file_manifest.json', 'r').read())
 
             container.wait(timeout=10)
-            vol_files = self.get_file_manifest(container,
-                opts['working_dir'] + '/file_manifest.json')
+            # If the volume is new, for some reason file_manifest isn't created
+            # and the volume is completely empty, so this errors
+            # There's probably a better fix
+            try:
+                vol_files = self.get_file_manifest(container,
+                    opts['working_dir'] + '/file_manifest.json')
+            except docker.errors.NotFound:
+                vol_files = dict()
             files = self.get_files_to_update(local_files, vol_files)
 
             if not files:
@@ -227,7 +233,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                 msg = "Making tarball"
                 observer.start_progress(step, msg)
                 tar_stream = BytesIO()
-                tar = tarfile.TarFile(fileobj=tar_stream, mode='w')
+                tar = tarfile.open(mode='w:gz', fileobj=tar_stream)
                 total = len(files)
                 for i in range(total):
                     observer.notify_progress(step, msg, int((i + 1) * 100 / total))
