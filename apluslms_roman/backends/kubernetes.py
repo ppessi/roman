@@ -36,9 +36,9 @@ class KubernetesBackend(Backend):
         env = self.environment
         opts = dict(
             image=step.img,
-            command=step.cmd,
+            command=step.cmd or '',
             environment=step.env,
-            namespace=env.environ['namespace'],
+            namespace=env.environ.get('namespace', 'default'),
             name=step.img.split(':')[0].replace('/', '-')
         )
         if step.mnt:
@@ -56,7 +56,7 @@ class KubernetesBackend(Backend):
             ]
             opts['working_dir'] = step.mnt
         else:
-            wpath = self.WORK_PATH
+            wpath = self.VOLUMES['source']
 
             opts['volumes'] = [
                 client.V1Volume(
@@ -89,21 +89,22 @@ class KubernetesBackend(Backend):
                     read_only=False
                 )
             ]
+            opts['working_dir'] = wpath
         return opts
 
     def prepare(self, task: BuildTask, observer: BuildObserver):
-        pass
+        return BuildResult()
 
     def build(self, task: BuildTask, observer: BuildObserver):
         api_client = self._client
         for step in task.steps:
-            observer.start_step(step)
+            observer.step_running(step)
             opts = self._run_opts(task, step)
             observer.manager_msg(step, "Running deployment with image {}:".format(opts['image']))
             name = opts['name']
             try:
                 create_resp = create_pod(**opts)
-                print(create_resp)
+                # print(create_resp)
                 name = create_resp.metadata.name
                 # Waiting pod finished
                 while True:
@@ -124,7 +125,7 @@ class KubernetesBackend(Backend):
                     name=name,
                     namespace=opts['namespace'],
                 )
-                observer.end_step(step)
+                observer.step_succeeded(step)
             return BuildResult()
 
     def verify(self):
