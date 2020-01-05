@@ -43,6 +43,11 @@ class DockerBackend(Backend):
     debug_hint = _("""Do you have docker-ce installed and running?
 Are you in local 'docker' group? Have you logged out and back in after joining?
 You might be able to add yourself to that group with 'sudo adduser docker'.""")
+    vol_opts = {
+        'mounts': [Mount('/source', 'source')],
+        'working_dir': '/source',
+        'image': 'file_manifest:latest'
+    }
 
     @cached_property
     def _client(self):
@@ -127,10 +132,10 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
 
     def build(self, task, observer):
         client = self._client
+        self.update_volume(observer)
         for step in task.steps:
             observer.step_pending(step)
             opts = self._run_opts(task, step)
-            self.update_volume('source', opts['working_dir'], step, observer)
             observer.manager_msg(step, "Starting container {}:".format(opts['image']))
             try:
                 with create_container(client, **opts) as container:
@@ -138,7 +143,6 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                     for line in container.logs(stderr=True, stream=True):
                         observer.container_msg(step, line.decode('utf-8'))
                     ret = container.wait(timeout=10)
-
             except docker.errors.APIError as err:
                 observer.step_failed(step)
                 error = "%s %s" % (err.__class__.__name__, err)
@@ -153,17 +157,8 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                     observer.step_failed(step)
                     return BuildResult(code, error, step)
                 observer.step_succeeded(step)
-            self.update_local('source', opts['working_dir'], step, observer)
+        self.update_local(observer)
         return BuildResult()
-
-    def opts_for_update(self, volume_name, working_dir):
-        opts = {}
-        opts['mounts'] = [Mount(
-            working_dir, volume_name,
-            type='volume', no_copy=False)]
-        opts['working_dir'] = working_dir
-        opts['image'] = 'file_manifest:latest'
-        return opts
 
     def get_files_to_update(self, source, target):
         files = sorted([f[2:] for f in source
@@ -208,8 +203,8 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
         tar = tarfile.open(mode="r", fileobj=bytes_)
         return loads(tar.extractfile('file_manifest.json').read().decode())
 
-    def update_volume(self, volume_name, working_dir, step, observer):
-        opts = self.opts_for_update(volume_name, working_dir)
+    def update_volume(self, observer, step=None):
+        opts = self.vol_opts
         observer.manager_msg(step, "Copying files to container")
         with create_container(self._client, **opts) as container:
             print_files.main()
@@ -249,9 +244,8 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                 observer.manager_msg(step, "Tar loaded to volume")
 
 
-    def update_local(self, volume_name, working_dir, step, observer):
-        opts = self.opts_for_update(volume_name, working_dir)
-        # observer.manager_msg(step, "Starting container {}:".format(opts['image']))
+    def update_local(self, observer, step=None):
+        opts = self.vol_opts
         with create_container(self._client, **opts) as container:
             print_files.main()
             local_files = loads(open('file_manifest.json', 'r').read())
@@ -264,6 +258,7 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
             observer.manager_msg(step, "Updating local files")
             msg = "Downloading files from container"
             if not files:
+                observer.manager_msg(step, "No files to update")
                 return
             total = len(files)
             apiclient = docker.APIClient()
@@ -275,7 +270,6 @@ You might be able to add yourself to that group with 'sudo adduser docker'.""")
                 bytes_.write(chunk)
             bytes_.seek(0)
             tar = tarfile.open(mode="r", fileobj=bytes_)
-            working_dir = working_dir[1:]
             observer.start_progress(step, msg)
             for i in range(total):
                 f = files[i]
